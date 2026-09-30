@@ -7,7 +7,16 @@ import {
   type StoryDocument,
   type StoryScene,
 } from '../models/story';
-import { getStats, getTimelineWarning, orderedScenes, validateName } from '../models/storyRules';
+import {
+  buildClueBoard,
+  filterClueBoard,
+  getStats,
+  getTimelineWarning,
+  orderedScenes,
+  validateName,
+  type ClueBoardEntry,
+  type ClueBoardFilter,
+} from '../models/storyRules';
 import type { StoryRepository } from '../repositories/storyRepository';
 
 export type ViewModelStatus = 'loading' | 'ready' | 'editing' | 'error' | 'completed';
@@ -20,6 +29,7 @@ export interface StoryViewState {
   error: string;
   search: string;
   activeSection: 'overview' | 'characters' | 'clues';
+  clueFilter: ClueBoardFilter;
 }
 
 type Listener = () => void;
@@ -33,6 +43,7 @@ export class StoryViewModel {
     error: '',
     search: '',
     activeSection: 'overview',
+    clueFilter: 'unresolved',
   };
   private readonly listeners = new Set<Listener>();
 
@@ -62,6 +73,11 @@ export class StoryViewModel {
 
   setSection(activeSection: StoryViewState['activeSection']): void {
     this.setState({ activeSection });
+  }
+
+  // The filter is local board state; it must never touch selectedSceneId.
+  setClueFilter(clueFilter: ClueBoardFilter): void {
+    this.setState({ clueFilter });
   }
 
   selectScene(sceneId: string): void {
@@ -178,6 +194,22 @@ export class StoryViewModel {
   get selectedScene(): StoryScene | null {
     const story = this.state.story;
     return story?.scenes.find((scene) => scene.id === story.selectedSceneId) ?? null;
+  }
+
+  /** Recomputed from the live timeline order on every read, so spans are never stale. */
+  get clueBoard(): ClueBoardEntry[] {
+    const story = this.state.story;
+    if (!story) return [];
+    return filterClueBoard(buildClueBoard(story), this.state.clueFilter);
+  }
+
+  get clueBoardAll(): ClueBoardEntry[] {
+    const story = this.state.story;
+    return story ? buildClueBoard(story) : [];
+  }
+
+  get clueFilter(): ClueBoardFilter {
+    return this.state.clueFilter;
   }
 
   get timelineWarning(): string | null {
