@@ -33,4 +33,34 @@ describe('story view model', () => {
     viewModel.resetProject();
     expect(viewModel.snapshot.story?.id).toBe(createStarterStory().id);
   });
+
+  it('filters the clue board without changing the selected scene in the workspace', () => {
+    const viewModel = new StoryViewModel(new LocalStoryRepository(new MemoryStorageService()));
+    viewModel.initialize();
+    const setupId = viewModel.snapshot.story!.scenes[0].id;
+    viewModel.selectScene(setupId);
+    viewModel.setSection('clues');
+    viewModel.setClueFilter('all');
+    expect(viewModel.snapshot.story?.selectedSceneId).toBe(setupId);
+    expect(viewModel.snapshot.clueFilter).toBe('all');
+    const allRows = viewModel.clueBoardRows;
+    viewModel.setClueFilter('unresolved');
+    expect(viewModel.snapshot.story?.selectedSceneId).toBe(setupId);
+    expect(viewModel.clueBoardRows.length).toBeLessThanOrEqual(allRows.length);
+    expect(viewModel.clueBoardRows.every((row) => !row.resolved)).toBe(true);
+  });
+
+  it('never hides a clue whose referenced scene is gone, and focusScene returns to the overview', () => {
+    const viewModel = new StoryViewModel(new LocalStoryRepository(new MemoryStorageService()));
+    viewModel.initialize();
+    const story = viewModel.snapshot.story!;
+    const dangling = { id: 'clue-lost', title: '失落的细节', setupSceneId: 'scene-vanished', payoffSceneId: '' };
+    story.clues.push(dangling);
+    viewModel.setSection('clues');
+    expect(viewModel.clueBoardRows.some((row) => row.clue.id === dangling.id)).toBe(true);
+    const aliveSceneId = story.scenes[0].id;
+    viewModel.focusScene(aliveSceneId);
+    expect(viewModel.snapshot.activeSection).toBe('overview');
+    expect(viewModel.snapshot.story?.selectedSceneId).toBe(aliveSceneId);
+  });
 });

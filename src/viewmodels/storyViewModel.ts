@@ -7,10 +7,11 @@ import {
   type StoryDocument,
   type StoryScene,
 } from '../models/story';
-import { getStats, getTimelineWarning, orderedScenes, validateName } from '../models/storyRules';
+import { getClueBoardRows, getStats, getTimelineWarning, orderedScenes, validateName, type ClueBoardRow } from '../models/storyRules';
 import type { StoryRepository } from '../repositories/storyRepository';
 
 export type ViewModelStatus = 'loading' | 'ready' | 'editing' | 'error' | 'completed';
+export type ClueFilter = 'unresolved' | 'all';
 
 export interface StoryViewState {
   status: ViewModelStatus;
@@ -20,6 +21,7 @@ export interface StoryViewState {
   error: string;
   search: string;
   activeSection: 'overview' | 'characters' | 'clues';
+  clueFilter: ClueFilter;
 }
 
 type Listener = () => void;
@@ -33,6 +35,7 @@ export class StoryViewModel {
     error: '',
     search: '',
     activeSection: 'overview',
+    clueFilter: 'unresolved',
   };
   private readonly listeners = new Set<Listener>();
 
@@ -62,6 +65,17 @@ export class StoryViewModel {
 
   setSection(activeSection: StoryViewState['activeSection']): void {
     this.setState({ activeSection });
+  }
+
+  // 只切换伏笔看板的过滤范围，是看板本地的视图状态，不碰 selectedSceneId。
+  setClueFilter(clueFilter: ClueFilter): void {
+    this.setState({ clueFilter });
+  }
+
+  // 从伏笔看板跳回工作区定位某个场景；主工作区当前选中的场景不因此丢失。
+  focusScene(sceneId: string): void {
+    this.setState({ activeSection: 'overview' });
+    if (sceneId) this.updateStory((story) => ({ ...story, selectedSceneId: sceneId }));
   }
 
   selectScene(sceneId: string): void {
@@ -173,6 +187,22 @@ export class StoryViewModel {
     const story = this.requireStory();
     const keyword = this.state.search.trim().toLowerCase();
     return orderedScenes(story).filter((scene) => `${scene.title}${scene.summary}${scene.conflict}`.toLowerCase().includes(keyword));
+  }
+
+  /** 时间线上的全部场景（不受搜索影响），供伏笔看板定位使用。 */
+  get allScenes(): StoryScene[] {
+    return orderedScenes(this.requireStory());
+  }
+
+  /**
+   * 伏笔看板行：每次读取都基于当前时间线重新计算跨度，
+   * 时间线重排后不会留下旧数字。
+   */
+  get clueBoardRows(): ClueBoardRow[] {
+    const rows = getClueBoardRows(this.requireStory());
+    if (this.state.clueFilter === 'all') return rows;
+    // 「只看未回收」包含遗失线索（回收点失效也算还悬着），但不藏起任何一条。
+    return rows.filter((row) => !row.resolved);
   }
 
   get selectedScene(): StoryScene | null {
